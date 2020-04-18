@@ -1,10 +1,16 @@
 from flask import (
-    Blueprint, render_template,  # flash, g, redirect, request, url_for
+    Blueprint,
+    render_template,
+    # request,  # flash, g, redirect, url_for
 )
+from . import mddb
 
 bp = Blueprint("sory", __name__)
 
 
-@bp.route("/")
+@bp.route("/", methods=("GET",))
 def index():
-    return render_template("sory/sory.html", message="fix it")
+    boards = mddb.list_dbs()
+    print(boards)
+
+    return render_template("sory/sory.html", boards=boards, message="fix it")

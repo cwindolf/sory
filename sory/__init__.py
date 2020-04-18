@@ -28,8 +28,11 @@ def create_app(test_config=None):
 
     # main app
     from . import sory
-
     app.register_blueprint(sory.bp)
     app.add_url_rule("/", endpoint="index")
+
+    # boards management
+    from . import boards
+    app.register_blueprint(boards.bp)
 
     return app

@@ -2,6 +2,16 @@
 
 {% block nav %}
     <h1>im sory</h1>
+    <ul>
+    {% for board in boards %}
+        <li>{{ board }}</li>
+    {% endfor %}
+    </ul>
+    <form method="post" action="{{ url_for('boards.create') }}">
+        <label for="name">board name</label>
+        <input name="name" id="name" required>
+        <input type="submit" value="+">
+    </form>
 {% endblock %}
 
 {% block main %}
