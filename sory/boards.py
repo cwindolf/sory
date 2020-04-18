@@ -3,7 +3,7 @@ from flask import (
     render_template,
     request,  # flash, g, redirect, url_for
 )
-from . import mddb
+from . import model
 
 bp = Blueprint("boards", __name__)
 
@@ -15,14 +15,14 @@ def create():
     if request.form:
         name = request.form.get("name")
         if name:
-            mddb.add_db(name)
-            print('added', name)
+            model.add_board(name)
+            print("added", name)
         else:
             errors.append("No name submitted with form?")
     else:
         errors.append("No form data when creating board?")
 
-    boards = mddb.list_dbs()
+    boards = model.boards()
 
     return render_template(
         "sory/sory.html", boards=boards, message="fix it", errors=errors

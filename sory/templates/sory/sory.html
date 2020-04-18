@@ -4,7 +4,7 @@
     <h1>im sory</h1>
     <ul>
     {% for board in boards %}
-        <li>{{ board }}</li>
+        <li>{{ board.name }}</li>
     {% endfor %}
     </ul>
     <form method="post" action="{{ url_for('boards.create') }}">
