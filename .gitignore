@@ -1,6 +1,9 @@
 # sory ignore
 sory/sorydb/
 
+# PyCharm
+.idea/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
