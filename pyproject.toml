@@ -7,6 +7,7 @@ authors = ["Charlie Windolf <cwindolf95@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^2.7"
 Flask = "^1.1.2"
+python-dotenv = "^0.13.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.6"
