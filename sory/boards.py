@@ -1,7 +1,9 @@
 from flask import (
     Blueprint,
-    render_template,
-    request,  # flash, g, redirect, url_for
+    redirect,
+    request,
+    url_for,
+    render_template,  # flash, g, ,
 )
 from . import model
 
@@ -12,18 +14,17 @@ bp = Blueprint("boards", __name__)
 def create():
     errors = []
 
-    if request.form:
-        name = request.form.get("name")
-        if name:
-            model.add_board(name)
+    name = request.form.get("name")
+    if name:
+        try:
+            board = model.get_board(name)
             print("added", name)
-        else:
-            errors.append("No name submitted with form?")
+            return redirect(url_for("sory", board=board.name), code=303)
+        except ValueError as e:
+            errors.append(str(e))
     else:
-        errors.append("No form data when creating board?")
-
-    boards = model.boards()
+        errors.append("No name submitted with form?")
 
     return render_template(
-        "sory/sory.html", boards=boards, message="fix it", errors=errors
+        "sory/sory.html", boards=model.boards, board=None, errors=errors
     )

@@ -24,6 +24,18 @@ def list_subdir_names(the_dir):
     return [d for d in os.listdir(the_dir) if os.path.isdir(join(the_dir, d))]
 
 
+# -- error
+
+
+class ImSory(ValueError):
+    pass
+
+
+def err(condition, message):
+    if not condition:
+        raise ImSory(message)
+
+
 # -- model classes
 
 
@@ -37,12 +49,27 @@ class card:
         self._validate()
 
     def _validate(self):
-        assert all(c in string.ascii_letters for c in self.name)
-        assert self.column_root
-        assert os.path.isdir(self.column_root)
-        assert self.path.endswith(ext)
+        err(
+            all(c in string.ascii_letters for c in self.name),
+            f"Invalid name {self.name} for card.",
+        )
+        err(
+            self.column_root,
+            f"Card needs a column root but got {self.column_root}.",
+        )
+        err(
+            os.path.isdir(self.column_root),
+            f"Card's column root {self.column_root} not a directory.",
+        )
+        err(
+            self.path.endswith(ext),
+            f"Card path needs to end with {ext} but was {self.path}.",
+        )
         if os.path.exists(self.path):
-            assert os.path.isfile(self.path)
+            err(
+                os.path.isfile(self.path),
+                f"Card path {self.path} already existed but was not a file.",
+            )
         else:
             open(self.path, "w").close()
 
@@ -73,11 +100,20 @@ class column:
         self._validate()
 
     def _validate(self):
-        assert all(c in string.ascii_lowercase for c in self.name)
-        assert self.board_root
-        assert os.path.isdir(self.board_root)
+        err(
+            all(c in string.ascii_lowercase for c in self.name),
+            f"{self.name} invalid name for column.",
+        )
+        err(self.board_root, f"Column got abd board root {self.board_root}.")
+        err(
+            os.path.isdir(self.board_root),
+            f"Column's board root {self.board_root} was not a directory.",
+        )
         if os.path.exists(self.path):
-            assert os.path.isdir(self.path)
+            err(
+                os.path.isdir(self.path),
+                f"Column path {self.path} exists but is not a directory.",
+            )
         else:
             os.makedirs(self.path)
 
@@ -90,7 +126,7 @@ class column:
         self._validate()
         return [card.from_file(f) for f in glob(join(self.path, glob_ext))]
 
-    def add_card(self, name):
+    def get_card(self, name):
         return card(name, self.path)
 
     @classmethod
@@ -109,11 +145,20 @@ class board:
         self._validate()
 
     def _validate(self):
-        assert self.root
-        assert os.path.isdir(self.root)
-        assert all(c in string.ascii_lowercase for c in self.name)
+        err(self.root, f"Bad board root {self.root}.")
+        err(
+            os.path.isdir(self.root),
+            f"Board root {self.root} not a directory.",
+        )
+        err(
+            all(c in string.ascii_lowercase for c in self.name),
+            f"Bad board name {self.name}",
+        )
         if os.path.exists(self.path):
-            assert os.path.isdir(self.path)
+            err(
+                os.path.isdir(self.path),
+                f"Board path {self.path} exists but is not a directory.",
+            )
         else:
             os.makedirs(self.path)
 
@@ -124,7 +169,7 @@ class board:
             for p in list_subdir_paths_no_trailing_slash(self.path)
         ]
 
-    def add_column(self, name):
+    def get_column(self, name):
         return column(name, self.path)
 
     @classmethod
@@ -137,12 +182,18 @@ class board:
 # -- global model api
 
 
-def add_board(name):
+def get_board(name):
     return board(name, current_app.instance_path)
 
 
-def boards():
+def _boards():
     return [
         board.from_path(p)
         for p in list_subdir_paths_no_trailing_slash(current_app.instance_path)
     ]
+
+
+def __getattr__(name):
+    if name == "boards":
+        return _boards()
+    assert False

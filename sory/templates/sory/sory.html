@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
 {% block nav %}
-    <h1>im sory</h1>
-    <ul>
-    {% for board in boards %}
-        <li>{{ board.name }}</li>
+    <h1><a href="{{ url_for('sory') }}">im sory</a></h1>
+    <ul id="boards">
+    {% for b in boards %}
+        <li class="{{ 'active' if board.name == b.name else '' }}">{{ b.name }}</li>
     {% endfor %}
     </ul>
     <form method="post" action="{{ url_for('boards.create') }}">
@@ -14,6 +14,6 @@
     </form>
 {% endblock %}
 
-{% block main %}
+{% block board %}
     <h1>im trying to {{ message }}.</h1>
 {% endblock %}
