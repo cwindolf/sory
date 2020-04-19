@@ -28,11 +28,13 @@ def create_app(test_config=None):
 
     # main view
     from . import sory
+
     app.register_blueprint(sory.bp)
     app.add_url_rule("/", endpoint="sory")
 
     # controller
     from . import ctrlr
+
     app.register_blueprint(ctrlr.bp)
 
     return app
