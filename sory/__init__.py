@@ -26,15 +26,13 @@ def create_app(test_config=None):
     def hello():
         return "Hello, World!"
 
-    # main app
+    # main view
     from . import sory
-
     app.register_blueprint(sory.bp)
     app.add_url_rule("/", endpoint="sory")
 
-    # boards management
-    from . import boards
-
-    app.register_blueprint(boards.bp)
+    # controller
+    from . import ctrlr
+    app.register_blueprint(ctrlr.bp)
 
     return app

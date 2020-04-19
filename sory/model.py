@@ -1,3 +1,8 @@
+"""
+The add_* return instance whether or not it exists, and should persist
+it either way.
+The get_* and *.from_path return only existing instances.
+"""
 import os
 from os.path import join
 from glob import glob
@@ -40,6 +45,9 @@ def err(condition, message):
 
 
 class card:
+
+    chars = string.digits + string.ascii_letters + ' '
+
     def __init__(self, name, column_root):
         assert os.path.isdir(column_root)
         assert len(name) <= 61
@@ -50,7 +58,7 @@ class card:
 
     def _validate(self):
         err(
-            all(c in string.ascii_letters for c in self.name),
+            all(c in self.chars for c in self.name),
             f"Invalid name {self.name} for card.",
         )
         err(
@@ -88,10 +96,13 @@ class card:
         column_root, name_md = os.path.split(filename)
         assert column_root
         assert name_md.endswith(ext)
-        return card(name_md[:-ext_len])
+        return card(name_md[:-ext_len], column_root)
 
 
 class column:
+
+    chars = string.digits + string.ascii_letters + ' '
+
     def __init__(self, name, board_root):
         assert os.path.isdir(board_root)
         self.name = name
@@ -101,7 +112,7 @@ class column:
 
     def _validate(self):
         err(
-            all(c in string.ascii_lowercase for c in self.name),
+            all(c in self.chars for c in self.name),
             f"{self.name} invalid name for column.",
         )
         err(self.board_root, f"Column got abd board root {self.board_root}.")
@@ -124,9 +135,9 @@ class column:
     @property
     def cards(self):
         self._validate()
-        return [card.from_file(f) for f in glob(join(self.path, glob_ext))]
+        return [card.from_filename(f) for f in glob(join(self.path, glob_ext))]
 
-    def get_card(self, name):
+    def add_card(self, name):
         return card(name, self.path)
 
     @classmethod
@@ -137,6 +148,9 @@ class column:
 
 
 class board:
+
+    chars = string.ascii_lowercase
+
     def __init__(self, name, root):
         assert os.path.exists(root)
         self.name = name
@@ -151,7 +165,7 @@ class board:
             f"Board root {self.root} not a directory.",
         )
         err(
-            all(c in string.ascii_lowercase for c in self.name),
+            all(c in self.chars for c in self.name),
             f"Bad board name {self.name}",
         )
         if os.path.exists(self.path):
@@ -162,6 +176,9 @@ class board:
         else:
             os.makedirs(self.path)
 
+    def __eq__(self, other):
+        return isinstance(other, board) and self.path == other.path
+
     @property
     def columns(self):
         return [
@@ -170,6 +187,9 @@ class board:
         ]
 
     def get_column(self, name):
+        return column.from_path(join(self.path, name))
+
+    def add_column(self, name):
         return column(name, self.path)
 
     @classmethod
@@ -182,8 +202,12 @@ class board:
 # -- global model api
 
 
-def get_board(name):
+def add_board(name):
     return board(name, current_app.instance_path)
+
+
+def get_board(name):
+    return board.from_path(join(current_app.instance_path, name))
 
 
 def _boards():
@@ -193,7 +217,8 @@ def _boards():
     ]
 
 
+# make this module look like the other classes
 def __getattr__(name):
     if name == "boards":
         return _boards()
-    assert False
+    err(False, f"Um. You were looking for {name}? I don't know her.")
