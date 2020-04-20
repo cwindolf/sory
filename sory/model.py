@@ -53,6 +53,36 @@ def ass(condition, message, no=False):
     raise ImSory(message)
 
 
+# -- git layer
+
+
+lock = Lock()
+
+try:
+    repo = git.Repo(current_app.instance_path)
+except git.InvalidGitRepositoryError:
+    repo = git.Repo.init(current_app.instance_path)
+
+
+class commit_txn:
+    def __init__(self, path, commit_message):
+        self.path = path
+        self.commit_message = commit_message
+
+    def __enter__(self):
+        ass(not repo.index.diff(None), "I don't want to mess with that.")
+        lock.acquire()
+
+    def __exit__(self):
+        repo.index.add([self.path])
+        ass(
+            len(repo.index.diff(None)) == 1,
+            "Whoah there. One thing at a time.",
+        )
+        repo.index.commit(self.commit_message)
+        lock.release()
+
+
 # -- model classes
 
 
@@ -99,9 +129,17 @@ class card:
     @property
     def content(self):
         self._validate()
-        with open(self.path, "r") as card_md:
-            content = card_md.read()
+        with lock:
+            with open(self.path, "r") as card_md:
+                content = card_md.read()
         return content
+
+    @content.setter
+    def content(self, value):
+        ass(isinstance(value, str), "Um, string please?")
+        with commit_txn(f"Update card {self.name}."):
+            with open(self.path, "w") as card_md:
+                card_md.write(value)
 
     @classmethod
     def from_filename(cls, filename):
@@ -181,7 +219,7 @@ class board:
 
     chars = string.ascii_lowercase
 
-    def __init__(self, name, root):
+    def __init__(self, name: str, root: str):
         assert exists(root)
         self.name = name
         self.root = root
@@ -240,35 +278,6 @@ class board:
         ass(isdir(path), "from_path but it didn't exist.", no=True)
         db_root, board_dir = os.path.split(path)
         return cls(board_dir, db_root)
-
-
-# -- git layer
-
-lock = Lock()
-
-try:
-    repo = git.Repo(current_app.instance_path)
-except git.InvalidGitRepositoryError:
-    repo = git.Repo.init(current_app.instance_path)
-
-
-class commit_txn:
-    def __init__(self, path, commit_message):
-        self.path = path
-        self.commit_message = commit_message
-
-    def __enter__(self):
-        ass(not repo.index.diff(None), "I don't want to mess with that.")
-        lock.acquire()
-
-    def __exit__(self):
-        repo.index.add([self.path])
-        ass(
-            len(repo.index.diff(None)) == 1,
-            "Whoah there. One thing at a time.",
-        )
-        repo.index.commit(self.commit_message)
-        lock.release()
 
 
 # -- global model api
