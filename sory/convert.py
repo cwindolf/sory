@@ -1,8 +1,14 @@
 from typing import NamedTuple, Union, Iterable, List
+import itertools
 import re
 
 
 # -- lexer
+
+
+class Meta(NamedTuple):
+    delim = "---"
+    meta: dict
 
 
 class Pound(NamedTuple):
@@ -40,7 +46,11 @@ class Bullet(NamedTuple):
 
 
 class Indent(NamedTuple):
-    lit = "    "
+    level: int
+
+
+class Dedent(NamedTuple):
+    pass
 
 
 class Word(NamedTuple):
@@ -55,6 +65,7 @@ class Newline(NamedTuple):
     pass
 
 
+whitespace = re.compile("\s")
 word_boundary = re.compile(f"[\s{Star.lit}{Underscore.lit}{Backtick.lit}]")
 
 
@@ -68,6 +79,7 @@ Lex = Union[
     Uncheckedbox,
     Bullet,
     Indent,
+    Dedent,
     Word,
     Blank,
     Newline,
@@ -75,16 +87,66 @@ Lex = Union[
 
 
 def lex(lines: Iterable[str]) -> Iterable[Lex]:
+    # check first line for indentation
+    first_line = next(lines)
+    m = whitespace.match(first_line)
+    assert not m or m.start
+
+    # meta can only appear at the tippy top of the file
+    if first_line.rstrip() == Meta.delim:
+        meta = {}
+        for line in lines:
+            if line.rstrip() == Meta.delim:
+                break
+            else:
+                assert Meta.kv_delim in line
+                key, value = line.split(Meta.kv_delim)
+                meta[key] = value
+        yield Meta(meta)
+    else:
+        # in the other branch, meta consumes first line
+        # so, we only need to put it back if we didn't
+        # use it up already.
+        lines = itertools.chain([first_line], lines)
+
+    # Python-style indentation stack
+    indentation = [0]
+
     for line in lines:
         # -- things that can only be in the beginning of the line
-        while line.startswith(Indent.lit):
-            yield Indent()
-            line = line[len(Indent.lit):]
+        # deal with indentation: python-style indent / dedent tokens
+        # first, see how many blanks the line starts with
+        n_spaces = 0
+        while not any(
+            # ensure that non-Blank tokens that start with
+            # whitespace are not eaten by the indentation
+            line.startswith(list_class.lit)
+            for list_class in (Bullet, Checkedbox, Uncheckedbox)
+        ):
+            m = whitespace.search(line)
+            if m and m.start == 0:
+                n_spaces += 1
+                line = line[1:]
+            else:
+                break
+        # emit the proper {in,de}dents and maintain stack
+        if n_spaces > indentation[-1]:
+            indentation.append(indentation)
+            yield Indent(n_spaces)
+        elif n_spaces == indentation[-1]:
+            pass
+        else:
+            while n_spaces < indentation[-1]:
+                indentation.pop()
+                yield Dedent()
+        assert indentation[-1] == n_spaces
 
+        # header
         while line.startswith(Pound.lit):
             yield Pound()
             line = line[len(Pound.lit):]
 
+        # code block fence
         # this guy consumes the whole line
         while line.startswith(Fence.lit):
             yield Fence(line[len(Fence.lit):])
