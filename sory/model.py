@@ -77,13 +77,16 @@ def commit_txn(path: str, commit_message: str) -> Generator[None, None, None]:
     lock.acquire()
     try:
         yield
-    finally:
+    except ImSory:
+        raise
+    else:
         repo.index.add([path])
         ass(
             len(repo.index.diff(None)) == 1,
             "Whoah there. One thing at a time.",
         )
         repo.index.commit(commit_message)
+    finally:
         lock.release()
 
 
