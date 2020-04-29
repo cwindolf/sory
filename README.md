@@ -7,7 +7,9 @@
  [gfm]: https://github.github.com/gfm/
 
 
-# Lexer / parser
+### Lexer / parser
+
+[kaleidoscope][kaleidoscope], [dedent][dedent]
 
  [kaleidoscope]: https://llvm.org/docs/tutorial/
 
