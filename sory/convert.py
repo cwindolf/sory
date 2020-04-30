@@ -166,19 +166,19 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
         while line.startswith(Pound.lit):
             assert n_spaces == 0
             yield Pound()
-            line = line[len(Pound.lit):]
+            line = line[len(Pound.lit) :]
 
         # code block fence
         # this guy consumes the whole line
         while line.startswith(Fence.lit):
-            yield Fence(line[len(Fence.lit):])
+            yield Fence(line[len(Fence.lit) :])
             line = ""
 
         # list types come after indent
         for list_class in (Bullet, Checkedbox, Uncheckedbox):
             if line.startswith(list_class.lit):
                 yield list_class()
-                line = line[len(list_class.lit):]
+                line = line[len(list_class.lit) :]
                 break  # only one list type per line
 
         # -- things that occupy the rest of the line
@@ -187,7 +187,7 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
             for span_class in (Backtick, Star, Under):
                 if line.startswith(span_class.lit):
                     yield span_class()
-                    line = line[len(span_class.lit):]
+                    line = line[len(span_class.lit) :]
 
             # lowest precedence is taken by blanks and words
             # one blank per space, words are delimited by blanks
@@ -197,7 +197,7 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
                 match = word_boundary.search(line)
                 if match:
                     yield Word(line[: match.start])
-                    line = line[match.start:]
+                    line = line[match.start :]
                 else:
                     yield Word(line)
                     line = ""
@@ -212,23 +212,24 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
 # -- parser
 
 
-class PlainSpan(NamedTuple):
+class Plain(NamedTuple):
     span: str
 
 
-class BoldSpan(NamedTuple):
+class Strong(NamedTuple):
     span: str
 
 
-class ItalicSpan(NamedTuple):
+class Em(NamedTuple):
     span: str
 
 
-class CodeSpan(NamedTuple):
+class Code(NamedTuple):
     span: str
 
 
-Span = Union[PlainSpan, BoldSpan, ItalicSpan, CodeSpan]
+Span = Union[Plain, Strong, Em, Code]
+DelimitedType = Union[Type[Strong], Type[Em], Type[Code]]
 
 
 class Text(NamedTuple):
@@ -276,35 +277,55 @@ class Header(NamedTuple):
 Top = Union[Text, Checklist, BulletList, Header, CodeBlock]
 
 
-def parse_codespan(lexes: Iterable[Lex], indent: int = 0) -> CodeSpan:
-    span = ""
-
-    for cur in lexes:
-        if isinstance(cur, Backtick):
-            break
-
-        elif isinstance(cur, Word):
-            span.append(cur.word)
-
-        elif isinstance(cur, Newline):
-            # consume expected indentation
-            for i in range(indent):
-                assert isinstance(cur, Indent)
-                cur = next(lexes)
-
-        else:
-            span.append(cur.lit)
+def parse_delimited_type(delimited_type: DelimitedType):
+    if delimited_type is Strong:
+        delimiter_type = Star
+    elif delimited_type is Em:
+        delimiter_type = Under
+    elif delimited_type is Code:
+        delimiter_type = Backtick
     else:
-        # we should have seen a Backtick by now
         assert False
 
-    return CodeSpan(span)
+    def parse_delimited_span(
+        lexes: Iterable[Lex], indent: int = 0
+    ) -> delimited_type:
+        span = ""
+
+        for cur in lexes:
+            if isinstance(cur, delimiter_type):
+                break
+
+            elif isinstance(cur, Word):
+                span.append(cur.word)
+
+            elif isinstance(cur, Newline):
+                # consume expected indentation
+                for i in range(indent):
+                    assert isinstance(cur, Indent)
+                    cur = next(lexes)
+
+            else:
+                span.append(cur.lit)
+        else:
+            # we should have seen a delimiter by now
+            assert False
+
+        return delimited_type(span)
+
+    return parse_delimited_span
+
+
+# Let's use that factory
+parse_code = parse_delimited_type(Code)
+parse_em = parse_delimited_type(Em)
+parse_strong = parse_delimited_type(Strong)
 
 
 def parse_text(cur: Lex, lexes: Iterable[Lex], indent: int = 0) -> Text:
     spans = []
     prev = Newline()
-    while not isinstance(prev, Newline) and isinstance(cur, Newline):
+    while not (isinstance(prev, Newline) and isinstance(cur, Newline)):
         # -- beginning of line stuff
         if isinstance(prev, Newline):
             # consume expected indentation
@@ -325,7 +346,11 @@ def parse_text(cur: Lex, lexes: Iterable[Lex], indent: int = 0) -> Text:
 
         # -- let's parse these spans
         elif isinstance(cur, Backtick):
-            spans.append(parse_codespan(lexes, indent=indent))
+            spans.append(parse_code(lexes, indent=indent))
+        elif isinstance(cur, Star):
+            spans.append(parse_strong(lexes, indent=indent))
+        elif isinstance(cur, Under):
+            spans.append(parse_em(lexes, indent=indent))
 
     return spans
 
