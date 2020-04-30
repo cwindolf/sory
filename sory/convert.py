@@ -29,7 +29,7 @@ class Star(NamedTuple):
     lit = "*"
 
 
-class Underscore(NamedTuple):
+class Under(NamedTuple):
     lit = "_"
 
 
@@ -65,16 +65,15 @@ class Newline(NamedTuple):
     pass
 
 
-whitespace = re.compile("\s")
-word_boundary = re.compile(f"[\s{Star.lit}{Underscore.lit}{Backtick.lit}]")
-
-
+# I would rather have these token classes subclass a class
+# Lex, but there are big problems mixing inheritance with
+# NamedTuple. A union requires bookkeeping but whatever...
 Lex = Union[
     Pound,
     Fence,
     Backtick,
     Star,
-    Underscore,
+    Under,
     Checkedbox,
     Uncheckedbox,
     Bullet,
@@ -84,6 +83,11 @@ Lex = Union[
     Blank,
     Newline,
 ]
+
+
+# Some helper regexes. Probably most would have more? lol.
+whitespace = re.compile("\s")
+word_boundary = re.compile(f"[\s{Star.lit}{Under.lit}{Backtick.lit}]")
 
 
 def lex(lines: Iterable[str]) -> Iterable[Lex]:
@@ -114,6 +118,12 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
 
     for line in lines:
         # -- things that can only be in the beginning of the line
+        # first handle all blank line. it's ignored, it doesn't
+        # change the indentation level, etc.
+        if not line.strip():
+            yield Newline()
+            continue
+
         # deal with indentation: python-style indent / dedent tokens
         # first, see how many blanks the line starts with
         n_spaces = 0
@@ -129,9 +139,20 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
                 line = line[1:]
             else:
                 break
-        # emit the proper {in,de}dents and maintain stack
+
+        # now get implied indentation from list types,
+        # but don't consume the token yet.
+        # (no other types require indentation for continuation,
+        # they are either delimited like the fence, or just
+        # keep rolling like regular text or a header.)
+        for list_class in (Bullet, Checkedbox, Uncheckedbox):
+            if line.startswith(list_class.lit):
+                n_spaces += len(list_class.lit)
+                break  # only one list type per line
+
+        # emit the proper {In,De}dents and maintain stack
         if n_spaces > indentation[-1]:
-            indentation.append(indentation)
+            indentation.append(n_spaces)
             yield Indent(n_spaces)
         elif n_spaces == indentation[-1]:
             pass
@@ -141,8 +162,9 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
                 yield Dedent()
         assert indentation[-1] == n_spaces
 
-        # header
+        # headers
         while line.startswith(Pound.lit):
+            assert n_spaces == 0
             yield Pound()
             line = line[len(Pound.lit):]
 
@@ -152,18 +174,17 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
             yield Fence(line[len(Fence.lit):])
             line = ""
 
-        # list types come after indent, and only
-        # one of these should be parsed as such
+        # list types come after indent
         for list_class in (Bullet, Checkedbox, Uncheckedbox):
             if line.startswith(list_class.lit):
                 yield list_class()
                 line = line[len(list_class.lit):]
-                break
+                break  # only one list type per line
 
         # -- things that occupy the rest of the line
         while line:
             # span delims
-            for span_class in (Backtick, Star, Underscore):
+            for span_class in (Backtick, Star, Under):
                 if line.startswith(span_class.lit):
                     yield span_class()
                     line = line[len(span_class.lit):]
