@@ -240,11 +240,13 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
 # text -> span* break
 # break -> Newline Newline+
 # span -> Backtick code Backtick | Star strong Star | Under em Under
-# code -> Blank* [Newline] Blank* raw Blank* [Newline] Blank* | Backtick code Backtick
+# code -> nbsp raw nbsp | Backtick code Backtick
 # strong -> raw | [raw] Under strem Under [raw]
 # em -> raw | [raw] Star strem Star [raw]
 # strem -> raw
-# raw -> [Word,Blank,Newline]*
+# raw -> [Word,nbsp]*
+# nbsp -> Blank* [Newline] Blank*
+
 
 
 class LiteralLine(NamedTuple):
