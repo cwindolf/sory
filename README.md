@@ -50,6 +50,13 @@ also,
  -this
  - break the list?
 
+and what do they do for
+
+ 1. out
+ 2. of
+ 3. order
+ 5. list
+ 4. items?
 
 ```python
 # this is a test...
