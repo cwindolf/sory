@@ -79,6 +79,8 @@ and what do they do for
  5. list
  4. items?
 
+how   do   they deal  with lots of    space   between      words
+
 ```python
 # this is a test...
 ```what happens?
