@@ -1,6 +1,16 @@
-from typing import NamedTuple, Union, Iterable, List
+from typing import NamedTuple, Union, Iterable, List, Type, TypeVar, Optional
 import itertools
 import re
+
+
+# -- helper library
+
+
+T = TypeVar["T"]
+
+
+def unpeek(head: T, tail: Iterable[T]) -> Iterable[T]:
+    return itertools.chain([head], tail)
 
 
 # -- lexer
@@ -54,11 +64,11 @@ class Dedent(NamedTuple):
 
 
 class Word(NamedTuple):
-    word: str
+    lit: str
 
 
 class Blank(NamedTuple):
-    lit = " "
+    lit: str
 
 
 class Newline(NamedTuple):
@@ -111,7 +121,7 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
         # in the other branch, meta consumes first line
         # so, we only need to put it back if we didn't
         # use it up already.
-        lines = itertools.chain([first_line], lines)
+        lines = unpeek(first_line, lines)
 
     # Python-style indentation stack
     indentation = [0]
@@ -119,7 +129,8 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
     for line in lines:
         # -- things that can only be in the beginning of the line
         # first handle all blank line. it's ignored, it doesn't
-        # change the indentation level, etc.
+        # change the indentation level, etc. parser will just see
+        # it as another consecutive `Newline`.
         if not line.strip():
             yield Newline()
             continue
@@ -202,14 +213,42 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
                     yield Word(line)
                     line = ""
             else:
-                yield Blank()
+                yield Blank(line[:1])
                 line = line[1:]
 
-        # and of course, signal line end when done with the line
+        # signal line end to parser
         yield Newline()
 
 
 # -- parser
+
+# grammar
+# [] is optional, () is "one of these"
+
+# top -> block*
+# block -> header | quote | listing | list | paragraph
+# header -> Pound+ text
+# quote -> Indent text Dedent
+# listing -> Fence Newline preline* Fence break
+# list -> Indent checklist Dedent | Indent bulletlist Dedent
+# checklist -> checkitem+
+# checkitem -> (Check,Uncheck) text Newline+
+# bulletlist -> bulletitem+
+# bulletitem -> Bullet text Newline+
+# preline -> (Word,Blank)* Newline
+# paragraph -> text
+# text -> span* break
+# break -> Newline Newline+
+# span -> Backtick code Backtick | Star strong Star | Under em Under
+# code -> raw | Backtick code Backtick
+# strong -> raw | [raw] Under strem Under [raw]
+# em -> raw | [raw] Star strem Star [raw]
+# strem -> raw
+# raw -> [Word,Blank,Newline]*
+
+
+class LiteralLine(NamedTuple):
+    content: str
 
 
 class Plain(NamedTuple):
@@ -229,15 +268,10 @@ class Code(NamedTuple):
 
 
 Span = Union[Plain, Strong, Em, Code]
-DelimitedType = Union[Type[Strong], Type[Em], Type[Code]]
 
 
 class Text(NamedTuple):
     spans: List[Span]
-
-
-class LiteralLine(NamedTuple):
-    content: str
 
 
 class CodeBlock(NamedTuple):
@@ -274,147 +308,117 @@ class Header(NamedTuple):
     text: Text
 
 
-Top = Union[Text, Checklist, BulletList, Header, CodeBlock]
+Top = Union[Meta, Text, Checklist, BulletList, Header, CodeBlock]
 
 
-def parse_delimited_type(delimited_type: DelimitedType):
-    if delimited_type is Strong:
-        delimiter_type = Star
-    elif delimited_type is Em:
-        delimiter_type = Under
-    elif delimited_type is Code:
-        delimiter_type = Backtick
+def get_raw_until(delim_type: Type[Lex], lexes: Iterable[Lex]):
+    span = ""
+
+    for cur in lexes:
+        assert not any(isinstance(cur, T) for T in (Indent, Dedent))
+        if isinstance(cur, delim_type):
+            break
+        else:
+            span.append(cur.lit)
     else:
+        # we should have seen a delimiter by now
         assert False
 
-    def parse_delimited_span(
-        lexes: Iterable[Lex], indent: int = 0
-    ) -> delimited_type:
-        span = ""
-
-        for cur in lexes:
-            if isinstance(cur, delimiter_type):
-                break
-
-            elif isinstance(cur, Word):
-                span.append(cur.word)
-
-            elif isinstance(cur, Newline):
-                # consume expected indentation
-                for i in range(indent):
-                    assert isinstance(cur, Indent)
-                    cur = next(lexes)
-
-            else:
-                span.append(cur.lit)
-        else:
-            # we should have seen a delimiter by now
-            assert False
-
-        return delimited_type(span)
-
-    return parse_delimited_span
+    return span
 
 
-# Let's use that factory
-parse_code = parse_delimited_type(Code)
-parse_em = parse_delimited_type(Em)
-parse_strong = parse_delimited_type(Strong)
-
-
-def parse_text(cur: Lex, lexes: Iterable[Lex], indent: int = 0) -> Text:
-    spans = []
-    prev = Newline()
-    while not (isinstance(prev, Newline) and isinstance(cur, Newline)):
-        # -- beginning of line stuff
-        if isinstance(prev, Newline):
-            # consume expected indentation
-            for i in range(indent):
-                assert isinstance(cur, Indent)
-                prev = cur
-                cur = next(lexes)
-
-            # consume blanks at the beginning of the line
-            while isinstance(cur, Blank):
-                prev = cur
-                cur = next(lexes)
-
-            # if the line was composed entirely of Indent and
-            # Blank, let's call it an empty line and finish
-            if isinstance(cur, Newline):
-                return spans
-
-        # -- let's parse these spans
-        elif isinstance(cur, Backtick):
-            spans.append(parse_code(lexes, indent=indent))
-        elif isinstance(cur, Star):
-            spans.append(parse_strong(lexes, indent=indent))
-        elif isinstance(cur, Under):
-            spans.append(parse_em(lexes, indent=indent))
-
-    return spans
-
-
-def parse_literalline(
-    cur: Lex, lexes: Iterable[Lex], indent: int = 0
-) -> LiteralLine:
-    # consume expected indentation
-    for i in range(indent):
-        assert isinstance(cur, Indent)
-        cur = next(lexes)
-
-    # store rest of line as literal
-    line = ""
-    while not isinstance(cur, Newline):
-        if isinstance(cur, Word):
-            line.append(cur.word)
-        else:
-            line.append(cur.lit)
-        cur = next(lexes)
-    assert isinstance(cur, Newline)
-
-    return LiteralLine(line)
-
-
-def parse_codeblock(
-    cur: Lex, lexes: Iterable[Lex], indent: int = 0
-) -> CodeBlock:
-    # language will be starting fence's annot
-    assert isinstance(cur, Fence)
-    lang = cur.annot
-
-    # get the actual code as literal lines
-    cur = next(lexes)
-    code = []
-    while not isinstance(cur, Fence):
-        code.append(parse_literalline(cur, lexes, indent=indent))
-        cur = next(lexes)
-
-    # the literal lines should leave a
-    # blank fence at the end
-    assert isinstance(cur, Fence)
-    assert not cur.annot
-
-    return CodeBlock(lang, code)
-
-
-def parse_quote(cur: Lex, lexes: Iterable[Lex], indent: int = 0) -> Quoted:
-    assert isinstance(cur, Indent)
-    return Quoted(parse_text(cur, lexes, indent=indent + 1))
-
-
-def parse_header(cur: Lex, lexes: Iterable[Lex]) -> Header:
-    assert isinstance(cur, Pound)
-    level = 1
-    cur = next(lexes)
-    while isinstance(cur, Pound):
-        level += 1
-        cur = next(lexes)
-    return Header(level, parse_text(cur, lexes))
+span_delim = [(Code, Backtick), (Strong, Star), (Em, Under)]
 
 
 def parse(lexes: Iterable[Lex]) -> Iterable[Top]:
+
+    # -- iterator combinators, relying on late-binding nonlocals
+
+    def peek() -> Lex:
+        nonlocal lexes
+        try:
+            ret = next(lexes)
+        except StopIteration:
+            return None
+        lexes = unpeek(ret, lexes)
+        return ret
+
+    def done() -> bool:
+        return peek() is not None
+
+    def advance() -> Lex:
+        nonlocal lexes
+        try:
+            return next(lexes)
+        except StopIteration:
+            return None
+
+    def check(Tok: Type[Lex]) -> bool:
+        return isinstance(peek(), Tok)
+
+    def match(Toks: List[Type[Lex]]) -> Optional[Lex]:
+        for Tok in Toks:
+            if check(Tok):
+                return advance()
+        return None
+
+    # -- parser helpers
+
+    def parse_text(cur: Lex, lexes: Iterable[Lex]) -> Text:
+        spans = []
+        prev = Newline()  # or None? not sure what the base case is.
+        plain_span = ""
+        while not (isinstance(prev, Newline) and isinstance(cur, Newline)):
+            # -- let's parse these spans
+            for SpanType, DelimType in span_delim:
+                if isinstance(cur, DelimType):
+                    if plain_span:
+                        yield Plain(plain_span)
+                        plain_span = ""
+                    yield SpanType(get_raw_until(DelimType, lexes))
+
+            # -- let's parse this plain span
+            else:
+                plain_span.append(cur.lit)
+
+        return spans
+
+    def parse_codeblock(cur: Lex, lexes: Iterable[Lex]) -> CodeBlock:
+        # language will be starting fence's annot
+        assert isinstance(cur, Fence)
+        lang = cur.annot
+
+        # get the actual code as literal lines
+        cur = next(lexes)
+        code = []
+        while not isinstance(cur, Fence):
+            code.append(get_raw_until(Newline, unpeek(cur, lexes)))
+            cur = next(lexes)
+
+        # the literal lines should leave a
+        # blank fence at the end
+        assert isinstance(cur, Fence)
+        assert not cur.annot
+
+        return CodeBlock(lang, code)
+
+    def parse_quote(cur: Lex, lexes: Iterable[Lex]) -> Quoted:
+        assert isinstance(cur, Indent)
+        return Quoted(parse_text(cur, lexes))
+
+    def parse_header(cur: Lex, lexes: Iterable[Lex]) -> Header:
+        assert isinstance(cur, Pound)
+        level = 1
+        cur = next(lexes)
+        while isinstance(cur, Pound):
+            level += 1
+            cur = next(lexes)
+        return Header(level, parse_text(cur, lexes))
+
     for cur in lexes:
+        if isinstance(cur, Meta):
+            yield cur
+
         if isinstance(cur, Pound):
             yield parse_header(cur, lexes)
 
