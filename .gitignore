@@ -1,8 +1,9 @@
 # sory ignore
 sory/sorydb/
 
-# PyCharm
+# PyCharm / subl
 .idea/
+sory.sublime-workspace
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
