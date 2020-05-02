@@ -17,6 +17,25 @@
 
  [dedent]: https://web.archive.org/web/20070922223915/http://www.secnetix.de/~olli/Python/block_indentation.hawk
 
+a test of the list. will they be part of the same list
+
+ - a
+ - b
+
+ - c
+
+
+ - d
+
+
+
+
+ - e
+
+hi
+
+ - g
+
 
 ```python
 # this is a test...
