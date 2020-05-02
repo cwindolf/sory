@@ -240,7 +240,7 @@ def lex(lines: Iterable[str]) -> Iterable[Lex]:
 # text -> span* break
 # break -> Newline Newline+
 # span -> Backtick code Backtick | Star strong Star | Under em Under
-# code -> raw | Backtick code Backtick
+# code -> Blank* [Newline] Blank* raw Blank* [Newline] Blank* | Backtick code Backtick
 # strong -> raw | [raw] Under strem Under [raw]
 # em -> raw | [raw] Star strem Star [raw]
 # strem -> raw
