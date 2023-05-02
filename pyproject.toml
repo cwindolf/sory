@@ -6,7 +6,7 @@ authors = ["Charlie Windolf <cwindolf95@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-Flask = "^1.1.2"
+Flask = "^2.3.2"
 python-dotenv = "^0.13.0"
 gitpython = "^3.1.1"
 mypy = "^0.770"
